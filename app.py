@@ -68,35 +68,36 @@ def load_predictions():
     return df
 
 @st.cache_data(ttl=60)
-def load_kpis():
+def load_priority(product_search):
     conn = get_connection()
-    return pd.read_sql("SELECT * FROM default.gold_machine_kpis", conn)
-
-@st.cache_data(ttl=60)
-def load_priority(product_search):  # Added product_search param
-    conn = get_connection()
-    
-    base_query = "SELECT * FROM default.maintenance_priority WHERE priority <= 50 ORDER BY priority"  # Expanded to 50
     
     if product_search:
-        # Include searched product even if low priority
-        search_query = f"""
-        SELECT *, ROW_NUMBER() OVER (ORDER BY CASE WHEN prediction = 1 THEN 0 ELSE 1 END, tool_wear_min DESC) as priority 
+        # GUARANTEE searched product appears (top 20 OR searched)
+        query = f"""
+        SELECT 
+          udi, product_id, machine_type, tool_wear_min, machine_failure,
+          prediction as predicted_failure, risk_level,
+          ROW_NUMBER() OVER (ORDER BY 
+            CASE WHEN prediction = 1 THEN 1 WHEN risk_level='HIGH RISK' THEN 2 ELSE 3 END,
+            tool_wear_min DESC
+          ) as display_priority
         FROM default.gold_predictions 
         WHERE product_id LIKE '%{product_search}%' 
-        AND (prediction = 1 OR tool_wear_min > 150)
-        """
-        query = f"""
-        ({base_query}) 
-        UNION ALL 
-        ({search_query})
-        ORDER BY priority
-        LIMIT 30
+           OR display_priority <= 20  -- Dynamic top 20
+        ORDER BY display_priority
+        LIMIT 25
         """
     else:
-        query = base_query
-        
-    return pd.read_sql(query, conn)
+        query = """
+        SELECT udi, product_id, machine_type, tool_wear_min, machine_failure,
+               prediction as predicted_failure, risk_level,
+               ROW_NUMBER() OVER (ORDER BY prediction DESC, tool_wear_min DESC) as display_priority
+        FROM default.maintenance_priority 
+        LIMIT 25
+        """
+    
+    df = pd.read_sql(query, conn)
+    return df
 
 # Load data
 predictions_df = load_predictions()
