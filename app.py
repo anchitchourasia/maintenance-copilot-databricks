@@ -97,7 +97,9 @@ with col2:
     st.metric("High Risk %", f"{high_risk_pct:.1%}")
 
 with col3:
-    delta_text = "KPI column not found"
+    kpi_value = "0.954"
+    kpi_note = None
+
     if not kpis_df.empty:
         possible_cols = ["failure_rate", "avg_failure_rate", "actual_failure_rate", "prediction"]
         found_col = next((c for c in possible_cols if c in kpis_df.columns), None)
@@ -106,11 +108,16 @@ with col3:
             try:
                 avg_failure = pd.to_numeric(kpis_df[found_col], errors="coerce").dropna().mean()
                 if pd.notna(avg_failure):
-                    delta_text = f"vs Actual {avg_failure:.1%}"
+                    kpi_note = f"Actual failure: {avg_failure:.1%}"
             except Exception:
-                delta_text = "KPI table loaded"
+                kpi_note = None
 
-    st.metric("Model AUC", "0.954", delta=delta_text)
+    st.metric("Model AUC", kpi_value, delta=None)
+
+    if kpi_note:
+        st.caption(f"Observed KPI: {kpi_note}")
+    else:
+        st.caption("Observed KPI: Not mapped in gold_machine_kpis")
 
 with col4:
     st.metric("Priority Actions", len(priority_df))
@@ -194,36 +201,44 @@ Provided data:
 User question:
 {question}
 
-Return the answer in exactly these sections:
+Return the answer in exactly this plain-text format:
 
-1. Summary
-- Give a short answer based only on the provided data.
+Summary:
+- ...
 
-2. Priority machines
-- List only machines visible in the provided data.
-- Include only these fields if available: udi, product_id, machine_type, risk_level, priority.
+Priority machines:
+- udi: ..., product_id: ..., machine_type: ..., risk_level: ..., priority: ...
 
-3. Recommended actions
-- Suggest practical maintenance actions based only on visible risk_level and priority.
-- Do not mention any unsupported technical cause.
+Recommended actions:
+- ...
+- ...
 
-4. Missing data
-- List important details not available in the provided data.
+Missing data:
+- ...
+- ...
 
 Rules:
 - Stay fully grounded in the provided data.
-- If the question asks for something unsupported, say it is not available in provided data.
+- Only mention columns explicitly present in the provided data.
 - Keep the response concise and professional.
 """
 
             response = llm.generate_content(prompt)
+            answer = response.text.strip()
+
+            formatted = (
+                answer.replace("Summary:", "#### Summary")
+                      .replace("Priority machines:", "#### Priority machines")
+                      .replace("Recommended actions:", "#### Recommended actions")
+                      .replace("Missing data:", "#### Missing data")
+            )
+
             st.success("✅ AI Analysis Complete!")
             st.markdown("### AI Maintenance Advisor")
-            st.markdown(response.text)
+            st.markdown(formatted)
 
         except Exception as e:
             st.error(f"AI service error: {str(e)}")
-
 
 st.markdown("---")
 c1, c2, c3 = st.columns(3)
