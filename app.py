@@ -1,8 +1,3 @@
-"""
-Predictive Maintenance Copilot
-Databricks Lakehouse + Random Forest (AUC 0.954) + Gemini 3 Flash
-"""
-
 import os
 import pandas as pd
 import plotly.express as px
@@ -22,7 +17,7 @@ st.set_page_config(
 st.title("🔧 Predictive Maintenance Copilot")
 st.markdown("**Databricks Lakehouse | Random Forest AUC 0.954 | Gemini 3 Flash**")
 
-# Sidebar
+# ---------- SIDEBAR ----------
 st.sidebar.title("⚙️ Controls")
 product_search = st.sidebar.text_input("🔍 Search Product ID")
 risk_filter = st.sidebar.multiselect(
@@ -83,6 +78,7 @@ predictions_df = load_predictions()
 kpis_df = load_kpis()
 priority_df = load_priority()
 
+# ---------- TOP METRICS ----------
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -122,6 +118,7 @@ with col3:
 with col4:
     st.metric("Priority Actions", len(priority_df))
 
+# ---------- CHARTS ----------
 col1, col2 = st.columns(2)
 
 with col1:
@@ -164,6 +161,7 @@ with col2:
     else:
         st.info("Machine type chart data not available.")
 
+# ---------- PRIORITY TABLE ----------
 st.subheader("🎯 Top Maintenance Priorities")
 if not priority_df.empty:
     display_cols = ["udi", "product_id", "machine_type", "risk_level", "priority"]
@@ -172,23 +170,142 @@ if not priority_df.empty:
 else:
     st.info("No priority data available.")
 
-# AI Assistant
-st.subheader("🤖 AI Maintenance Advisor")
-question = st.text_area(
-    "Ask about machine health or maintenance strategy:",
-    placeholder="Which machines should I fix first? What causes high risk?"
+st.markdown("---")
+c1, c2, c3 = st.columns(3)
+
+with c1:
+    st.markdown("**🗄️ Databricks Lakehouse**")
+    st.markdown("- Medallion Architecture (Bronze/Silver/Gold)")
+    st.markmarkdown("- Delta Lake (ACID + Time Travel)")
+
+with c2:
+    st.markdown("**🤖 ML Pipeline**")
+    st.markdown("- Random Forest Classification")
+    st.markdown("- AUC: 0.954")
+
+with c3:
+    st.markdown("**🚀 Production**")
+    st.markdown("- Batch Inference Pipeline")
+    st.markdown("- Real-time Risk Dashboard")
+
+st.markdown("---")
+st.caption("**Built by Anchit Chourasia** | Aspiring AI Engineer | [GitHub](https://github.com/anchitchourasia)")
+
+# =====================================================================
+# FLOATING CHAT ICON + POPUP: AI Maintenance Advisor
+# =====================================================================
+
+# 1) CSS for floating button and chat container
+st.markdown(
+    """
+    <style>
+    .chat-fab {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: #0f766e;
+        color: white;
+        border-radius: 50%;
+        width: 56px;
+        height: 56px;
+        border: none;
+        font-size: 26px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        cursor: pointer;
+        z-index: 9999;
+    }
+    .chat-popup {
+        position: fixed;
+        bottom: 90px;
+        right: 20px;
+        width: 380px;
+        max-height: 70vh;
+        background-color: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+        padding: 16px;
+        z-index: 9999;
+        overflow-y: auto;
+    }
+    .chat-popup-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    .chat-popup-title {
+        font-weight: 600;
+    }
+    .chat-close-btn {
+        border: none;
+        background: none;
+        font-size: 18px;
+        cursor: pointer;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
-if st.button("Get AI Advice", type="primary") and question:
-    with st.spinner("AI analyzing maintenance data..."):
-        try:
-            llm = get_llm()
+# 2) Session state for toggle + last answer
+if "show_chat" not in st.session_state:
+    st.session_state.show_chat = False
+if "chat_answer" not in st.session_state:
+    st.session_state.chat_answer = ""
 
-            safe_cols = [col for col in ["udi", "product_id", "machine_type", "risk_level", "priority"] if col in priority_df.columns]
-            context = priority_df[safe_cols].head(10).to_string(index=False) if not priority_df.empty else "No priority data available"
+# 3) Floating chat button (HTML)
+from streamlit.components.v1 import html as st_html
 
-            prompt = f"""
-You are a predictive maintenance assistant.
+st_html(
+    """
+    <button class="chat-fab" onclick="window.parent.postMessage({type: 'toggle_chat'}, '*')">
+        🤖
+    </button>
+    <script>
+    window.addEventListener('message', (event) => {
+        const streamlitEvent = { isStreamlitMessage: true, type: 'streamlit:setComponentValue', value: event.data };
+        window.parent.postMessage(streamlitEvent, '*');
+    });
+    </script>
+    """,
+    height=80,
+)
+
+# 4) Lightweight hack: toggle via query param or manual control
+#    For simplicity, expose a small checkbox (you can hide it later via CSS)
+chat_toggle = st.checkbox("Show AI Maintenance Advisor", value=st.session_state.show_chat, key="chat_toggle_internal")
+st.session_state.show_chat = chat_toggle
+
+# 5) Chat popup UI + existing logic
+if st.session_state.show_chat:
+    with st.container():
+        # Render popup "shell"
+        st.markdown(
+            """
+            <div class="chat-popup">
+              <div class="chat-popup-header">
+                <span class="chat-popup-title">AI Maintenance Advisor</span>
+              </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Inside popup: text area + button + answer
+        question = st.text_area(
+            "Ask about machine health or maintenance strategy:",
+            placeholder="Which machines should I fix first? What causes high risk?",
+            key="chat_question",
+        )
+
+        if st.button("Get AI Advice", type="primary", key="chat_btn") and question:
+            try:
+                llm = get_llm()
+
+                safe_cols = [col for col in ["udi", "product_id", "machine_type", "risk_level", "priority"] if col in priority_df.columns]
+                context = priority_df[safe_cols].head(10).to_string(index=False) if not priority_df.empty else "No priority data available"
+
+                prompt = f"""
+You are an AI Maintenance Advisor for a predictive maintenance dashboard that is already live and generating clear, reliable outputs from a trained Random Forest model.
 
 Use ONLY the data provided below.
 Do NOT use outside knowledge.
@@ -223,40 +340,23 @@ Rules:
 - Keep the response concise and professional.
 """
 
-            response = llm.generate_content(prompt)
-            answer = response.text.strip()
+                response = llm.generate_content(prompt)
+                answer = response.text.strip()
 
-            formatted = (
-                answer.replace("Summary:", "#### Summary")
-                      .replace("Priority machines:", "#### Priority machines")
-                      .replace("Recommended actions:", "#### Recommended actions")
-                      .replace("Missing data:", "#### Missing data")
-            )
+                formatted = (
+                    answer.replace("Summary:", "#### Summary")
+                          .replace("Priority machines:", "#### Priority machines")
+                          .replace("Recommended actions:", "#### Recommended actions")
+                          .replace("Missing data:", "#### Missing data")
+                )
+                st.session_state.chat_answer = formatted
 
-            st.success("✅ AI Analysis Complete!")
-            st.markdown("### AI Maintenance Advisor")
-            st.markdown(formatted)
+            except Exception as e:
+                st.session_state.chat_answer = f"Error: {str(e)}"
 
-        except Exception as e:
-            st.error(f"AI service error: {str(e)}")
+        if st.session_state.chat_answer:
+            st.markdown("---")
+            st.markdown(st.session_state.chat_answer)
 
-st.markdown("---")
-c1, c2, c3 = st.columns(3)
-
-with c1:
-    st.markdown("**🗄️ Databricks Lakehouse**")
-    st.markdown("- Medallion Architecture (Bronze/Silver/Gold)")
-    st.markdown("- Delta Lake (ACID + Time Travel)")
-
-with c2:
-    st.markdown("**🤖 ML Pipeline**")
-    st.markdown("- Random Forest Classification")
-    st.markdown("- AUC: 0.954")
-
-with c3:
-    st.markdown("**🚀 Production**")
-    st.markdown("- Batch Inference Pipeline")
-    st.markdown("- Real-time Risk Dashboard")
-
-st.markdown("---")
-st.caption("**Built by Anchit Chourasia** | Aspiring AI Engineer | [GitHub](https://github.com/anchitchourasia)")
+        # Close popup div
+        st.markdown("</div>", unsafe_allow_html=True)
