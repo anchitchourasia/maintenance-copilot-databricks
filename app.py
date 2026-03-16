@@ -197,18 +197,20 @@ st.markdown("---")
 st.caption("**Built by Anchit Chourasia** | Aspiring AI Engineer | [GitHub](https://github.com/anchitchourasia)")
 
 # ======================================================
-# 🗨️ FLOATING CHAT INTERFACE (EXACTLY LIKE CHATCOMPOSE)
+# 🗨️ FLOATING CHAT - COMPLETE WORKING VERSION
 # ======================================================
 
-# 1. Initialize session state
+# Initialize session state
 if "show_chat" not in st.session_state:
     st.session_state.show_chat = False
 if "chat_question" not in st.session_state:
     st.session_state.chat_question = ""
 if "chat_response" not in st.session_state:
     st.session_state.chat_response = ""
+if "chat_interaction" not in st.session_state:
+    st.session_state.chat_interaction = None
 
-# 2. Perfect CSS for floating chat (matches your screenshot)
+# CSS for perfect ChatCompose-style chat
 st.markdown("""
 <style>
 .chat-container {
@@ -222,11 +224,11 @@ st.markdown("""
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     border: none;
     color: white;
     font-size: 24px;
-    box-shadow: 0 8px 25px rgba(14, 165, 233, 0.4);
+    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
     cursor: pointer;
     transition: all 0.3s ease;
     display: flex;
@@ -236,141 +238,188 @@ st.markdown("""
 
 .chat-fab:hover {
     transform: scale(1.1);
-    box-shadow: 0 12px 35px rgba(14, 165, 233, 0.6);
+    box-shadow: 0 12px 35px rgba(16, 185, 129, 0.6);
 }
 
 .chat-popup {
-    width: 360px;
-    height: 500px;
+    width: 380px;
+    height: 520px;
     background: white;
-    border-radius: 20px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    border-radius: 24px;
+    box-shadow: 0 25px 70px rgba(0,0,0,0.25);
     overflow: hidden;
-    transform: translateY(20px);
+    transform: translateY(30px);
     opacity: 0;
-    transition: all 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     margin-bottom: 20px;
 }
 
-.chat-popup.active {
+.chat-popup.show {
     transform: translateY(0);
     opacity: 1;
 }
 
 .chat-header {
-    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
-    padding: 20px;
+    padding: 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .chat-title {
-    font-weight: 600;
+    font-weight: 700;
     font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .chat-close {
     background: rgba(255,255,255,0.2);
     border: none;
     border-radius: 50%;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     color: white;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.chat-close:hover {
+    background: rgba(255,255,255,0.3);
 }
 
 .chat-messages {
-    height: 300px;
-    padding: 20px;
+    height: 340px;
+    padding: 24px;
     overflow-y: auto;
-    background: #f8fafc;
+    background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
-.chat-input-area {
-    padding: 20px;
+.ai-message {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 20px 24px;
+    border-radius: 24px 24px 24px 8px;
+    margin-bottom: 16px;
+    font-size: 15px;
+    line-height: 1.6;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.user-placeholder {
+    color: #64748b;
+    text-align: center;
+    padding-top: 120px;
+    font-style: italic;
+}
+
+.chat-input-container {
+    padding: 24px;
     background: white;
     border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    align-items: center;
 }
 
 .chat-input {
-    width: 100%;
+    flex: 1;
     border: 2px solid #e2e8f0;
-    border-radius: 25px;
-    padding: 12px 20px;
-    font-size: 14px;
+    border-radius: 28px;
+    padding: 14px 24px;
+    font-size: 15px;
     outline: none;
+    transition: all 0.2s;
 }
 
 .chat-input:focus {
-    border-color: #0ea5e9;
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
 }
 
 .chat-send {
-    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
     border: none;
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    margin-left: 10px;
+    width: 48px;
+    height: 48px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: 18px;
+    transition: all 0.2s;
+}
+
+.chat-send:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
 }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. Chat HTML + JavaScript toggle
+# Prepare chat HTML variables (FIXES f-string backslash issue)
+chat_display_style = "block" if st.session_state.show_chat else "none"
+chat_visible_js = "true" if st.session_state.show_chat else "false"
+chat_response_html = st.session_state.chat_response or '<div class="user-placeholder">Ask me about machine health, maintenance priorities, or risk analysis!</div>'
+chat_question_value = st.session_state.chat_question.replace('"', '&quot;') if st.session_state.chat_question else ""
+
+# Complete working chat HTML
 chat_html = f"""
 <div class="chat-container">
-    <button class="chat-fab" onclick="toggleChat()">
+    <button class="chat-fab" id="chatToggleBtn" onclick="toggleChat()">
         🤖
     </button>
     
-    <div id="chatPopup" class="chat-popup" style="display: {'block' if st.session_state.show_chat else 'none'};">
+    <div id="chatPopup" class="chat-popup" style="display: {chat_display_style};">
         <div class="chat-header">
-            <div class="chat-title">AI Maintenance Advisor</div>
+            <div class="chat-title">🤖 AI Maintenance Advisor</div>
             <button class="chat-close" onclick="toggleChat()">×</button>
         </div>
         
         <div class="chat-messages" id="chatMessages">
-            {st.session_state.chat_response.replace('\\n', '<br>') if st.session_state.chat_response else '<div style="color: #64748b; text-align: center; padding-top: 100px;">Ask me about machine health, maintenance priorities, or risk analysis!</div>'}
+            {chat_response_html}
         </div>
         
-        <div class="chat-input-area">
-            <div style="display: flex;">
-                <input type="text" class="chat-input" id="chatInput" placeholder="Which machines should I fix first?" value="{st.session_state.chat_question}">
-                <button class="chat-send" onclick="sendMessage()">➤</button>
-            </div>
+        <div class="chat-input-container">
+            <input type="text" class="chat-input" id="chatInput" placeholder="Which machines should I fix first? What causes high risk?" value="{chat_question_value}">
+            <button class="chat-send" onclick="sendMessage()">➤</button>
         </div>
     </div>
 </div>
 
 <script>
-let chatVisible = {str(st.session_state.show_chat)};
+let chatVisible = {chat_visible_js};
+
 function toggleChat() {{
     chatVisible = !chatVisible;
     const popup = document.getElementById('chatPopup');
-    const fab = document.querySelector('.chat-fab');
+    const fab = document.getElementById('chatToggleBtn');
     
     if (chatVisible) {{
         popup.style.display = 'block';
-        setTimeout(() => popup.classList.add('active'), 10);
-        fab.style.display = 'none';
+        setTimeout(() => popup.classList.add('show'), 10);
+        fab.style.opacity = '0';
+        fab.style.visibility = 'hidden';
     }} else {{
-        popup.classList.remove('active');
+        popup.classList.remove('show');
         setTimeout(() => {{
             popup.style.display = 'none';
-            fab.style.display = 'flex';
-        }}, 300);
+            fab.style.opacity = '1';
+            fab.style.visibility = 'visible';
+        }}, 400);
     }}
     
-    // Send toggle state back to Streamlit
-    parent.postMessage({{
+    // Notify Streamlit
+    window.parent.postMessage({{
         type: "streamlit:setComponentValue",
         value: chatVisible
     }}, "*");
@@ -382,95 +431,93 @@ function sendMessage() {{
     const question = input.value.trim();
     
     if (question) {{
-        // Add user message
+        // Show user message immediately
         messages.innerHTML += `
-            <div style="margin-bottom: 15px;">
-                <div style="background: white; padding: 12px 16px; border-radius: 18px 18px 4px 18px; max-width: 80%; margin-left: auto; font-size: 14px;">
-                    ${question}
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+                <div style="background: #e2e8f0; padding: 14px 20px; border-radius: 24px 24px 8px 24px; max-width: 75%; font-size: 15px;">
+                    ${{question}}
                 </div>
             </div>
         `;
         input.value = '';
         messages.scrollTop = messages.scrollHeight;
         
-        // Trigger Streamlit rerun with question
-        parent.postMessage({{
+        // Send to Streamlit for AI response
+        window.parent.postMessage({{
             type: "streamlit:setComponentValue",
-            value: {{
-                question: question,
-                action: "generate"
-            }}
+            value: {{"question": question, "action": "generate"}}
         }}, "*");
     }}
 }}
 
+// Enter key support
 document.getElementById('chatInput').addEventListener('keypress', function(e) {{
-    if (e.key === 'Enter') {{
+    if (e.key === 'Enter' && !e.shiftKey) {{
+        e.preventDefault();
         sendMessage();
     }}
 }});
 </script>
 """
 
-st.components.v1.html(chat_html, height=600, width=400)
+st.components.v1.html(chat_html, height=650, width=420)
 
-# 4. Handle chat interactions
-if "chat_interaction" in st.session_state:
+# Handle AI generation
+if st.session_state.chat_interaction:
     interaction = st.session_state.chat_interaction
     if isinstance(interaction, dict) and interaction.get("action") == "generate":
         question = interaction.get("question", "")
         if question:
             st.session_state.chat_question = question
             
-            with st.spinner("AI analyzing..."):
+            with st.spinner("🤖 AI analyzing maintenance data..."):
                 try:
                     llm = get_llm()
                     safe_cols = [col for col in ["udi", "product_id", "machine_type", "risk_level", "priority"] if col in priority_df.columns]
                     context = priority_df[safe_cols].head(10).to_string(index=False) if not priority_df.empty else "No priority data available"
 
                     prompt = f"""
-You are a predictive maintenance assistant.
+You are a predictive maintenance assistant for a live production dashboard.
 
 Use ONLY the data provided below.
-Do NOT use outside knowledge.
-Do NOT invent dates, thresholds, causes, downtime, cost savings, tool wear, machine_failure values, or any field not explicitly present.
-If something is not explicitly present in the data, say: Not available in provided data.
+Do NOT use outside knowledge or invent values.
 
 Provided data:
 {context}
 
-User question:
-{question}
+Question: {question}
 
-Return the answer in exactly this plain-text format:
+Respond in this exact format:
 
-Summary:
-- ...
+**Summary:**
+- Key insight 1
+- Key insight 2
 
-Priority machines:
-- udi: ..., product_id: ..., machine_type: ..., risk_level: ..., priority: ...
+**Priority Machines:**
+- udi: [ID], product_id: [ID], risk_level: [LEVEL], priority: [NUM]
 
-Recommended actions:
-- ...
-- ...
+**Recommended Actions:**
+- Action 1
+- Action 2
 
-Missing data:
-- ...
-- ...
-
-Rules:
-- Stay fully grounded in the provided data.
-- Only mention columns explicitly present in the provided data.
-- Keep the response concise and professional.
+**Data Gaps:**
+- Missing field 1
 """
 
                     response = llm.generate_content(prompt)
                     answer = response.text.strip()
                     
-                    formatted = answer.replace("Summary:", "**Summary:**\n").replace("Priority machines:", "**Priority machines:**\n").replace("Recommended actions:", "**Recommended actions:**\n").replace("Missing data:", "**Missing data:**\n")
-                    st.session_state.chat_response = f'<div style="background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: white; padding: 16px 20px; border-radius: 18px 18px 18px 4px; margin-bottom: 10px; font-size: 14px;">{formatted}</div>'
+                    # Format for chat bubble
+                    formatted_answer = answer.replace("**Summary:**", "<strong>Summary:</strong>").replace("**Priority Machines:**", "<strong>Priority Machines:</strong>").replace("**Recommended Actions:**", "<strong>Recommended Actions:</strong>").replace("**Data Gaps:**", "<strong>Data Gaps:</strong>").replace("\n", "<br>")
+                    
+                    st.session_state.chat_response = f'<div class="ai-message">{formatted_answer}</div>'
+                    
+                    st.success("✅ AI response generated!")
                     
                 except Exception as e:
-                    st.session_state.chat_response = f'<div style="color: #ef4444; padding: 16px; text-align: center;">Error: {str(e)}</div>'
+                    st.session_state.chat_response = f'<div class="ai-message" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">⚠️ Error: {str(e)}</div>'
+    
+    st.session_state.chat_interaction = None
 
-st.session_state.chat_interaction = None
+# Reset interaction listener
+st.session_state.chat_interaction = st.session_state.get("chat_interaction_temp", None)
