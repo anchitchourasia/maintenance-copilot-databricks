@@ -68,10 +68,10 @@ def load_kpis():
     conn = get_connection()
     return pd.read_sql("SELECT * FROM default.gold_machine_kpis", conn)
 
-@st.cache_data(ttl=300)
-def load_priority():
-    conn = get_connection()
-    return pd.read_sql("SELECT * FROM default.maintenance_priority WHERE priority <= 20 ORDER BY priority", conn)
+st.dataframe(
+    priority_df[['udi', 'product_id', 'machine_type', 'risk_level', 'priority_rank']],
+    use_container_width=True
+)
 
 # Main dashboard
 col1, col2, col3, col4 = st.columns(4)
