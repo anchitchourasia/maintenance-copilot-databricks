@@ -1,5 +1,9 @@
+"""
+Predictive Maintenance Copilot
+Databricks Lakehouse + Random Forest (AUC 0.954) + Gemini 3 Flash
+"""
+
 import os
-import time
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -9,50 +13,29 @@ import google.generativeai as genai
 
 load_dotenv()
 
-# --- PAGE CONFIG ---
 st.set_page_config(
     layout="wide",
-    page_title="Maintenance Copilot Dashboard",
-    page_icon="📊"
+    page_title="Maintenance Copilot",
+    page_icon="🔧"
 )
 
-# --- CUSTOM CSS (For the Pink/Purple Dashboard Look) ---
-st.markdown("""
-    <style>
-    /* Background Gradient */
-    .stApp {
-        background: linear-gradient(135deg, #a445b2 0%, #d41872 50%, #ff0066 100%);
-        color: white;
-    }
-    
-    /* Card/Chart Container Styling */
-    div[data-testid="stMetric"], .stPlotlyChart, div[data-testid="stDataFrameHost"], .stAlert {
-        background-color: rgba(255, 255, 255, 0.12) !important;
-        backdrop-filter: blur(12px);
-        border-radius: 12px;
-        padding: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-    }
+st.title("🔧 Predictive Maintenance Copilot")
+st.markdown("**Databricks Lakehouse | Random Forest AUC 0.954 | Gemini 3 Flash**")
 
-    /* Text Colors */
-    h1, h2, h3, h4, span, label, p {
-        color: white !important;
-    }
+# Sidebar
+st.sidebar.title("⚙️ Controls")
+product_search = st.sidebar.text_input("🔍 Search Product ID")
+risk_filter = st.sidebar.multiselect(
+    "Filter Risk Level",
+    ["HIGH RISK", "MEDIUM RISK", "LOW RISK"],
+    default=["HIGH RISK", "MEDIUM RISK", "LOW RISK"]
+)
 
-    /* Metric Styling */
-    div[data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
-        font-weight: 700;
-    }
-    
-    /* Horizontal Radio buttons to mimic segmented control */
-    div[data-testid="stRadio"] > div {
-        flex-direction: row;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+if st.sidebar.button("🔄 Refresh Data"):
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    st.rerun()
 
-# --- CONNECTIONS ---
 @st.cache_resource
 def get_connection():
     return databricks.sql.connect(
@@ -64,113 +47,216 @@ def get_connection():
 @st.cache_resource
 def get_llm():
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    return genai.GenerativeModel("gemini-1.5-flash")
+    return genai.GenerativeModel("gemini-3-flash-preview")
 
-# --- DATA LOADING ---
 @st.cache_data(ttl=60)
-def load_data():
+def load_predictions():
     conn = get_connection()
-    df = pd.read_sql("SELECT * FROM default.gold_predictions", conn)
-    kpi = pd.read_sql("SELECT * FROM default.gold_machine_kpis", conn)
-    prio = pd.read_sql("SELECT * FROM default.maintenance_priority WHERE priority <= 20", conn)
-    return df, kpi, prio
+    query = """
+    SELECT * FROM default.gold_predictions
+    WHERE risk_level IN ('HIGH RISK', 'MEDIUM RISK', 'LOW RISK')
+    """
+    df = pd.read_sql(query, conn)
 
-# Sidebar
-st.sidebar.title("⚙️ Dashboard Controls")
-auto_refresh = st.sidebar.checkbox("Real-time Auto-Refresh (60s)", value=False)
-product_search = st.sidebar.text_input("🔍 Search Product ID")
-risk_filter = st.sidebar.multiselect(
-    "Risk Level", ["HIGH RISK", "MEDIUM RISK", "LOW RISK"], 
-    default=["HIGH RISK", "MEDIUM RISK", "LOW RISK"]
+    if product_search:
+        df = df[df["product_id"].astype(str).str.contains(product_search, case=False, na=False)]
+
+    if risk_filter:
+        df = df[df["risk_level"].isin(risk_filter)]
+
+    return df
+
+@st.cache_data(ttl=60)
+def load_kpis():
+    conn = get_connection()
+    return pd.read_sql("SELECT * FROM default.gold_machine_kpis", conn)
+
+@st.cache_data(ttl=60)
+def load_priority():
+    conn = get_connection()
+    return pd.read_sql(
+        "SELECT * FROM default.maintenance_priority WHERE priority <= 20 ORDER BY priority",
+        conn
+    )
+
+predictions_df = load_predictions()
+kpis_df = load_kpis()
+priority_df = load_priority()
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    high_risk_count = len(predictions_df[predictions_df["risk_level"] == "HIGH RISK"]) if not predictions_df.empty else 0
+    st.metric("Total Machines", len(predictions_df), delta=f"{high_risk_count} High Risk")
+
+with col2:
+    high_risk_pct = (
+        len(predictions_df[predictions_df["risk_level"] == "HIGH RISK"]) / len(predictions_df)
+        if not predictions_df.empty else 0
+    )
+    st.metric("High Risk %", f"{high_risk_pct:.1%}")
+
+with col3:
+    kpi_value = "0.954"
+    kpi_note = None
+
+    if not kpis_df.empty:
+        possible_cols = ["failure_rate", "avg_failure_rate", "actual_failure_rate", "prediction"]
+        found_col = next((c for c in possible_cols if c in kpis_df.columns), None)
+
+        if found_col:
+            try:
+                avg_failure = pd.to_numeric(kpis_df[found_col], errors="coerce").dropna().mean()
+                if pd.notna(avg_failure):
+                    kpi_note = f"Actual failure: {avg_failure:.1%}"
+            except Exception:
+                kpi_note = None
+
+    st.metric("Model AUC", kpi_value, delta=None)
+
+    if kpi_note:
+        st.caption(f"Observed KPI: {kpi_note}")
+    else:
+        st.caption("Observed KPI: Not mapped in gold_machine_kpis")
+
+with col4:
+    st.metric("Priority Actions", len(priority_df))
+
+col1, col2 = st.columns(2)
+
+with col1:
+    if not predictions_df.empty and "risk_level" in predictions_df.columns:
+        risk_counts = (
+            predictions_df["risk_level"]
+            .value_counts()
+            .reset_index()
+        )
+        risk_counts.columns = ["risk_level", "count"]
+
+        fig_pie = px.pie(
+            risk_counts,
+            values="count",
+            names="risk_level",
+            title="Risk Distribution",
+            hole=0.15
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+    else:
+        st.info("No prediction data available.")
+
+with col2:
+    if not predictions_df.empty and {"machine_type", "risk_level"}.issubset(predictions_df.columns):
+        chart_df = (
+            predictions_df.groupby(["machine_type", "risk_level"])
+            .size()
+            .reset_index(name="count")
+        )
+
+        fig_bar = px.bar(
+            chart_df,
+            x="machine_type",
+            y="count",
+            color="risk_level",
+            title="Risk by Machine Type",
+            barmode="group"
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+    else:
+        st.info("Machine type chart data not available.")
+
+st.subheader("🎯 Top Maintenance Priorities")
+if not priority_df.empty:
+    display_cols = ["udi", "product_id", "machine_type", "risk_level", "priority"]
+    available_cols = [col for col in display_cols if col in priority_df.columns]
+    st.dataframe(priority_df[available_cols], use_container_width=True)
+else:
+    st.info("No priority data available.")
+
+# AI Assistant
+st.subheader("🤖 AI Maintenance Advisor")
+question = st.text_area(
+    "Ask about machine health or maintenance strategy:",
+    placeholder="Which machines should I fix first? What causes high risk?"
 )
 
-# --- MAIN APP LOGIC ---
-try:
-    predictions_df, kpis_df, priority_df = load_data()
-    
-    # Filter Logic
-    if product_search:
-        predictions_df = predictions_df[predictions_df["product_id"].astype(str).str.contains(product_search)]
-    if risk_filter:
-        predictions_df = predictions_df[predictions_df["risk_level"].isin(risk_filter)]
-
-    # --- TOP HEADER ROW ---
-    t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns([3, 2, 1, 1, 1])
-    
-    with t_col1:
-        st.markdown("# Sales Dashboard") # Title matching your image style
-    
-    with t_col2:
-        # Replaced segmented_control with radio for compatibility
-        st.radio("Select Period", ["Qtr 1", "Qtr 2", "Qtr 3", "Qtr 4"], label_visibility="collapsed")
-
-    with t_col3:
-        st.metric("5615", "Sum of Quantity") # Example value from image
-    
-    with t_col4:
-        st.metric("37K", "Sum of Profit")
-        
-    with t_col5:
-        st.metric("438K", "Sum of Amount")
-
-    # --- MAIN DASHBOARD GRID ---
-    m_col1, m_col2, m_col3 = st.columns(3)
-
-    with m_col1:
-        # Sum of Profit by Sub-Category
-        fig1 = px.bar(predictions_df, x="priority", y="machine_type", orientation='h', 
-                      title="Sum of Profit by Sub-Category", 
-                      color_discrete_sequence=['#00D1FF'])
-        fig1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
-        st.plotly_chart(fig1, use_container_width=True)
-
-    with m_col2:
-        # Sum of Quantity by PaymentMode (Donut)
-        fig2 = px.pie(predictions_df, names="risk_level", hole=0.5, title="Sum of Quantity by Risk")
-        fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="white", showlegend=False)
-        st.plotly_chart(fig2, use_container_width=True)
-
-    with m_col3:
-        # Repeat Profit Chart to match layout
-        st.plotly_chart(fig1, use_container_width=True)
-
-    m2_col1, m2_col2, m2_col3 = st.columns(3)
-
-    with m2_col1:
-        # Quantity and Amount by Category
-        fig3 = px.pie(predictions_df, names="machine_type", hole=0.7, title="Amount by Category")
-        fig3.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="white")
-        st.plotly_chart(fig3, use_container_width=True)
-
-    with m2_col2:
-        # Amount by CustomerName
-        fig4 = px.bar(priority_df.head(6), x="product_id", y="priority", title="Amount by Product ID")
-        fig4.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
-        st.plotly_chart(fig4, use_container_width=True)
-
-    with m2_col3:
-        # Profit by Month (Line)
-        fig5 = px.line(priority_df, y="priority", title="Sum of Profit by Month")
-        fig5.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
-        st.plotly_chart(fig5, use_container_width=True)
-
-    # --- AI ASSISTANT SECTION ---
-    st.markdown("### 🤖 AI Maintenance Advisor")
-    question = st.text_input("Ask about machine health:", placeholder="What causes high risk machines?")
-    
-    if question:
-        with st.spinner("Analyzing..."):
+if st.button("Get AI Advice", type="primary") and question:
+    with st.spinner("AI analyzing maintenance data..."):
+        try:
             llm = get_llm()
-            context = priority_df.head(10).to_string()
-            response = llm.generate_content(f"Data context: {context}\n\nUser query: {question}")
-            st.info(response.text)
 
-except Exception as e:
-    st.error(f"Error connecting to Databricks: {e}")
-    st.info("Check your .env file for correct credentials.")
+            safe_cols = [col for col in ["udi", "product_id", "machine_type", "risk_level", "priority"] if col in priority_df.columns]
+            context = priority_df[safe_cols].head(10).to_string(index=False) if not priority_df.empty else "No priority data available"
 
-# Real-time Auto-refresh logic
-if auto_refresh:
-    time.sleep(60)
-    st.rerun()
-    
+            prompt = f"""
+You are a predictive maintenance assistant.
+
+Use ONLY the data provided below.
+Do NOT use outside knowledge.
+Do NOT invent dates, thresholds, causes, downtime, cost savings, tool wear, machine_failure values, or any field not explicitly present.
+If something is not explicitly present in the data, say: Not available in provided data.
+
+Provided data:
+{context}
+
+User question:
+{question}
+
+Return the answer in exactly this plain-text format:
+
+Summary:
+- ...
+
+Priority machines:
+- udi: ..., product_id: ..., machine_type: ..., risk_level: ..., priority: ...
+
+Recommended actions:
+- ...
+- ...
+
+Missing data:
+- ...
+- ...
+
+Rules:
+- Stay fully grounded in the provided data.
+- Only mention columns explicitly present in the provided data.
+- Keep the response concise and professional.
+"""
+
+            response = llm.generate_content(prompt)
+            answer = response.text.strip()
+
+            formatted = (
+                answer.replace("Summary:", "#### Summary")
+                      .replace("Priority machines:", "#### Priority machines")
+                      .replace("Recommended actions:", "#### Recommended actions")
+                      .replace("Missing data:", "#### Missing data")
+            )
+
+            st.success("✅ AI Analysis Complete!")
+            st.markdown("### AI Maintenance Advisor")
+            st.markdown(formatted)
+
+        except Exception as e:
+            st.error(f"AI service error: {str(e)}")
+
+st.markdown("---")
+c1, c2, c3 = st.columns(3)
+
+with c1:
+    st.markdown("**🗄️ Databricks Lakehouse**")
+    st.markdown("- Medallion Architecture (Bronze/Silver/Gold)")
+    st.markdown("- Delta Lake (ACID + Time Travel)")
+
+with c2:
+    st.markdown("**🤖 ML Pipeline**")
+    st.markdown("- Random Forest Classification")
+    st.markdown("- AUC: 0.954")
+
+with c3:
+    st.markdown("**🚀 Production**")
+    st.markdown("- Batch Inference Pipeline")
+    st.markdown("- Real-time Risk Dashboard")
+
+st.markdown("---")
+st.caption("**Built by Anchit Chourasia** | Aspiring AI Engineer | [GitHub](https://github.com/anchitchourasia)")
