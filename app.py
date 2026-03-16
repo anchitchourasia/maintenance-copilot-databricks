@@ -71,7 +71,8 @@ def load_kpis():
 @st.cache_data(ttl=300)
 def load_priority():
     conn = get_connection()
-    return pd.read_sql("SELECT * FROM default.maintenance_priority WHERE priority_rank <= 20", conn)
+    return pd.read_sql("SELECT * FROM default.maintenance_priority WHERE priority <= 20 ORDER BY priority", conn)
+
 
 # Main dashboard
 col1, col2, col3, col4 = st.columns(4)
