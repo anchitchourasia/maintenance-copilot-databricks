@@ -22,13 +22,19 @@ st.set_page_config(
 st.title("🔧 Predictive Maintenance Copilot")
 st.markdown("**Databricks Lakehouse | Random Forest AUC 0.954 | Gemini 3 Flash**")
 
+# Sidebar
 st.sidebar.title("⚙️ Controls")
 product_search = st.sidebar.text_input("🔍 Search Product ID")
 risk_filter = st.sidebar.multiselect(
     "Filter Risk Level",
     ["HIGH RISK", "MEDIUM RISK", "LOW RISK"],
-    default=["HIGH RISK", "MEDIUM RISK"]
+    default=["HIGH RISK", "MEDIUM RISK", "LOW RISK"]
 )
+
+if st.sidebar.button("🔄 Refresh Data"):
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    st.rerun()
 
 @st.cache_resource
 def get_connection():
@@ -43,7 +49,7 @@ def get_llm():
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
     return genai.GenerativeModel("gemini-3-flash-preview")
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_predictions():
     conn = get_connection()
     query = """
@@ -60,12 +66,12 @@ def load_predictions():
 
     return df
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_kpis():
     conn = get_connection()
     return pd.read_sql("SELECT * FROM default.gold_machine_kpis", conn)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_priority():
     conn = get_connection()
     return pd.read_sql(
@@ -91,14 +97,19 @@ with col2:
     st.metric("High Risk %", f"{high_risk_pct:.1%}")
 
 with col3:
-    try:
-        if not kpis_df.empty and "failure_rate" in kpis_df.columns:
-            avg_failure = kpis_df["failure_rate"].mean()
-            delta_text = f"vs Actual {avg_failure:.1%}"
-        else:
-            delta_text = "KPI column not found"
-    except Exception:
-        delta_text = "KPI table not ready"
+    delta_text = "KPI column not found"
+    if not kpis_df.empty:
+        possible_cols = ["failure_rate", "avg_failure_rate", "actual_failure_rate", "prediction"]
+        found_col = next((c for c in possible_cols if c in kpis_df.columns), None)
+
+        if found_col:
+            try:
+                avg_failure = pd.to_numeric(kpis_df[found_col], errors="coerce").dropna().mean()
+                if pd.notna(avg_failure):
+                    delta_text = f"vs Actual {avg_failure:.1%}"
+            except Exception:
+                delta_text = "KPI table loaded"
+
     st.metric("Model AUC", "0.954", delta=delta_text)
 
 with col4:
@@ -108,28 +119,43 @@ col1, col2 = st.columns(2)
 
 with col1:
     if not predictions_df.empty and "risk_level" in predictions_df.columns:
-        risk_counts = predictions_df["risk_level"].value_counts()
+        risk_counts = (
+            predictions_df["risk_level"]
+            .value_counts()
+            .reset_index()
+        )
+        risk_counts.columns = ["risk_level", "count"]
+
         fig_pie = px.pie(
-            values=risk_counts.values,
-            names=risk_counts.index,
-            title="Risk Distribution"
+            risk_counts,
+            values="count",
+            names="risk_level",
+            title="Risk Distribution",
+            hole=0.15
         )
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
-        st.info("No prediction data available")
+        st.info("No prediction data available.")
 
 with col2:
     if not predictions_df.empty and {"machine_type", "risk_level"}.issubset(predictions_df.columns):
-        fig_bar = px.histogram(
-            predictions_df,
+        chart_df = (
+            predictions_df.groupby(["machine_type", "risk_level"])
+            .size()
+            .reset_index(name="count")
+        )
+
+        fig_bar = px.bar(
+            chart_df,
             x="machine_type",
+            y="count",
             color="risk_level",
             title="Risk by Machine Type",
             barmode="group"
         )
         st.plotly_chart(fig_bar, use_container_width=True)
     else:
-        st.info("No machine type data available")
+        st.info("Machine type chart data not available.")
 
 st.subheader("🎯 Top Maintenance Priorities")
 if not priority_df.empty:
@@ -137,7 +163,7 @@ if not priority_df.empty:
     available_cols = [col for col in display_cols if col in priority_df.columns]
     st.dataframe(priority_df[available_cols], use_container_width=True)
 else:
-    st.info("No priority data available")
+    st.info("No priority data available.")
 
 st.subheader("🤖 AI Maintenance Advisor")
 question = st.text_area(
@@ -187,7 +213,7 @@ with c1:
 with c2:
     st.markdown("**🤖 ML Pipeline**")
     st.markdown("- Random Forest Classification")
-    st.markdown("- AUC: **0.954**")
+    st.markdown("- AUC: 0.954")
 
 with c3:
     st.markdown("**🚀 Production**")
