@@ -89,9 +89,16 @@ with col2:
     st.metric("High Risk %", f"{high_risk_pct:.1%}")
 
 with col3:
-    kpis_df = load_kpis()
-    avg_failure = kpis_df['failure_rate'].mean() if not kpis_df.empty else 0
-    st.metric("Model AUC", "0.954", delta=f"vs Actual {avg_failure:.1%}")
+    try:
+        kpis_df = load_kpis()
+        if not kpis_df.empty and 'failure_rate' in kpis_df.columns:
+            avg_failure = kpis_df['failure_rate'].mean()
+            delta_text = f"vs Actual {avg_failure:.1%}"
+        else:
+            delta_text = "KPI table empty/missing column"
+    except:
+        delta_text = "Table not ready"
+    st.metric("Model AUC", "0.954", delta=delta_text)
 
 with col4:
     priority_df = load_priority()
