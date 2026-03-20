@@ -93,7 +93,7 @@ flowchart TD
     F --> G[Streamlit Dashboard + Gemini AI Advisor] 
 ```
 ## Features
-### Live Dashboard
+1.Live Dashboard
 Real-time KPI cards
 
 Risk distribution chart
@@ -106,7 +106,7 @@ Trend-based visual insights
 
 Product search and risk filtering
 
-2. Machine Learning Pipeline
+2.Machine Learning Pipeline
 Predictive maintenance classification
 
 Random Forest model training
@@ -117,7 +117,7 @@ Batch inference pipeline
 
 AUC-based model performance reporting
 
-3. AI Maintenance Advisor
+3.AI Maintenance Advisor
 Gemini-powered assistant
 
 Grounded responses based only on provided dashboard data
@@ -128,7 +128,7 @@ Missing-data awareness
 
 Safe response formatting for demo-ready outputs
 
-4. Data Engineering
+4.Data Engineering
 Bronze, Silver, Gold table pipeline
 
 Databricks SQL integration
