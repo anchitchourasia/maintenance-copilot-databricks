@@ -92,7 +92,7 @@ flowchart TD
     F --> G[Streamlit Dashboard + Gemini AI Advisor] 
 ```
 ## Features
-###1. Live Dashboard
+-1. Live Dashboard
 Real-time KPI cards
 
 Risk distribution chart
