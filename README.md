@@ -92,7 +92,7 @@ flowchart TD
     F --> G[Streamlit Dashboard + Gemini AI Advisor] 
 ```
 ## Features
--1. Live Dashboard
+1. Live Dashboard
 Real-time KPI cards
 
 Risk distribution chart
@@ -137,33 +137,23 @@ Delta Lake architecture
 Real-time query-driven dashboard
 
 
-Gold Tables Used
+## Gold Tables Used
 default.gold_predictions
 default.gold_machine_kpis
 default.maintenance_priority
 
-Dashboard Metrics
+## Dashboard Metrics
 The dashboard includes:
-
-Total Machines
-
-High Risk Count
-
-High Risk Percentage
-
-Medium Risk Count
-
-Priority Actions
-
-Model AUC
-
-Risk Distribution
-
-Machine Type Analysis
-
-Priority by Machine Type
-
-Trend Visualizations
+- Total Machines
+- High Risk Count
+- High Risk Percentage
+- Medium Risk Count
+- Priority Actions
+- Model AUC
+- Risk Distribution
+- Machine Type Analysis
+- Priority by Machine Type
+- Trend Visualizations
 
 AI Advisor Example
 The AI advisor answers questions such as:
